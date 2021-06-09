@@ -1,3 +1,4 @@
+from numpy.core.fromnumeric import shape
 from network import *
 import cv2, os, time, math
 import glob
@@ -71,8 +72,11 @@ else:
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 
+input1 = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
+input2 = torch.tensor([1,channels_v,d,-1,-1],dtype=torch.float32)
+output = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
 
-def test_epoch(net,loader):
+if not is_training:
     output_path = "%s/TestResult/" % (task)
     if not os.path.isdir(output_path):
         os.makedirs(output_path)
@@ -110,12 +114,20 @@ def test_epoch(net,loader):
         view_direction[0, n, v, u, :] = view_direction[0, n, v, u, :] / (
         np.tile(np.linalg.norm(view_direction[0, n, v, u, :], axis=1, keepdims=True), (1, 3)) + 1e-10)
 
+
         ##Evalute result via network code to enter here
-        #.
-        #.
+        #.[result] = sess.run([network], feed_dict={input1: image_descriptor, input2: view_direction})
+        #.result = np.minimum(np.maximum(result, 0.0), 1.0) * 255.0
+        #Assumes PATH provided
+        #Concatenate image descriptor and view_direction inputs
+        PATH = 'give path here'
+        data = torch.cat((image_descriptor,view_direction),2)
+        model = UNet.cuda()
+        model.load_state_dict(torch.load(PATH))
+        model.eval()
+        result = model(data) 
         #.
         ####
-
         result = np.minimum(np.maximum(result, 0.0), 1.0) * 255.0
         cv2.imwrite(output_path + '%06d.png' % id, np.uint8(result[0, :, :, :]))
 
