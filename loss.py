@@ -58,4 +58,4 @@ def VGG_loss(network_output,GT,reuse=False):
         print(compute_error(tmp1,tmp2))
         p.append(compute_error(tmp1,tmp2))
     
-    return sum(p)
+    return p[0],p[1],p[2],p[3],p[4],sum(p)

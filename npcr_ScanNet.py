@@ -72,9 +72,9 @@ else:
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 
-input1 = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
-input2 = torch.tensor([1,channels_v,d,-1,-1],dtype=torch.float32)
-output = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
+#input1 = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
+#input2 = torch.tensor([1,channels_v,d,-1,-1],dtype=torch.float32)
+#output = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
 
 if not is_training:
     output_path = "%s/TestResult/" % (task)
