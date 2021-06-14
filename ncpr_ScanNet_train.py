@@ -1,4 +1,5 @@
 from numpy.core.fromnumeric import shape
+from torch.optim import optimizer
 from network import *
 import cv2, os, time, math
 import glob
@@ -10,6 +11,7 @@ from utils import *
 import torch
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
+import torch.optim as optim
 
 is_training = False  # if test, set this 'False'
 use_viewdirection = True  # use view direction
@@ -71,6 +73,9 @@ else:
         descriptors[0, :, 0:3] = np.transpose(point_clouds_colors) / 255.0
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
+
+model = UNet.cuda()
+opt = optim.Adam(model.parameters,lr=learning_rate)
 
 if is_training==True:
 
@@ -137,4 +142,38 @@ if is_training==True:
             view_direction[0, n, v, u, :] = view_direction[0, n, v, u, :] / (np.tile(np.linalg.norm(view_direction[0, n, v, u, :], axis=1, keepdims=True), (1, 3)) + 1e-10)
 
             image_output = np.expand_dims(cv2.resize(cv2.imread(image_name, -1), (w, h)), axis=0) / 255.0
+
+            if not random_crop:
+                if not renew_input:
+                    optimizer.zero_grad()
+                    data = torch.cat((image_descriptor,view_direction),2)
+                    output = model(data)
+                    current_loss = VGG_loss(output,image_output)
+                    current_loss.backward()
+                    optimizer.step()
+
+            all[i] = current_loss*255.0
+            cnt = cnt+1
+            print('%s %s %s %.2f %.2f %s' % (epoch, i, cnt, current_loss, np.mean(all[np.where(all)]), time.time() - st))
+        
+        os.makedirs("%s/%04d" % (task, epoch))
+#        saver.save(sess, "%s/model.ckpt" % (task))
+        torch.save({
+            'epoch':epoch,
+            'model_state_dict':model.state_dict(),
+            'optimizer_state_dict':optimizer.state_dict(),
+            'loss': current_loss
+                    },'path for checkpoint')
+        io.savemat("%s/" % task + 'descriptor.mat', {'descriptors': descriptors})
+
+        if epoch % 5 == 0:
+#            saver.save(sess, "%s/%04d/model.ckpt" % (task, epoch))
+            torch.save({
+                'epoch':epoch,
+                'model_state_dict':model.state_dict(),
+                'optimizer_state_dict':optimizer.state_dict(),
+                'loss': current_loss
+                        },'path for checkpoint between 5 models')
+            io.savemat("%s/%04d/" % (task, epoch) + 'descriptor.mat', {'descriptors': descriptors})
+
 

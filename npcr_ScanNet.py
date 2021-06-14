@@ -75,6 +75,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 #input1 = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
 #input2 = torch.tensor([1,channels_v,d,-1,-1],dtype=torch.float32)
 #output = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
+PATH = 'give path here'
+model = UNet.cuda()
+model.load_state_dict(torch.load(PATH))
+
 
 if not is_training:
     output_path = "%s/TestResult/" % (task)
@@ -120,10 +124,7 @@ if not is_training:
         #.result = np.minimum(np.maximum(result, 0.0), 1.0) * 255.0
         #Assumes PATH provided
         #Concatenate image descriptor and view_direction inputs
-        PATH = 'give path here'
         data = torch.cat((image_descriptor,view_direction),2)
-        model = UNet.cuda()
-        model.load_state_dict(torch.load(PATH))
         model.eval()
         result = model(data) 
         #.
