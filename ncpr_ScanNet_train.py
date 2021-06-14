@@ -144,14 +144,17 @@ if is_training==True:
             image_output = np.expand_dims(cv2.resize(cv2.imread(image_name, -1), (w, h)), axis=0) / 255.0
 
             if not random_crop:
-                if not renew_input:
-                    optimizer.zero_grad()
-                    data = torch.cat((image_descriptor,view_direction),2)
-                    output = model(data)
-                    current_loss = VGG_loss(output,image_output)
-                    current_loss.backward()
-                    optimizer.step()
-
+                optimizer.zero_grad()
+                data = torch.cat((image_descriptor,view_direction),2)
+                output = model(data)
+                current_loss = VGG_loss(output,image_output)
+                current_loss.backward()
+                optimizer.step()
+                
+                if renew_input:
+                    input_gradient = torch.autograd.grad(current_loss,image_descriptor)
+                    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient[0][0, n, v, u, :]
+            
             all[i] = current_loss*255.0
             cnt = cnt+1
             print('%s %s %s %.2f %.2f %s' % (epoch, i, cnt, current_loss, np.mean(all[np.where(all)]), time.time() - st))
