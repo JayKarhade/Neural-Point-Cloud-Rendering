@@ -143,16 +143,53 @@ if is_training==True:
 
             image_output = np.expand_dims(cv2.resize(cv2.imread(image_name, -1), (w, h)), axis=0) / 255.0
 
-            if not random_crop:
+            if random_crop:
+
+                # limitation of memory etc, we crop the image.
+                # Also, we hope crops almost cover the whole image to uniformly optimize point features.
+                for j in np.random.permutation(forward_time):
+                    movement_v = np.random.randint(0, overlap)
+                    movement_u = np.random.randint(0, overlap)
+
+                    if j==0:
+                        top_left_u = 0 + movement_u
+                        top_left_v = 0 + movement_v
+                    if j==1:
+                        top_left_u = w_croped - movement_u
+                        top_left_v = 0 + movement_v
+                    if j==2:
+                        top_left_u = 0 + movement_u
+                        top_left_v = h_croped - movement_v
+                    if j==3:
+                        top_left_u = w_croped - movement_u
+                        top_left_v = h_croped - movement_v
+
+                    optimizer.zero_grad()
+                    data = torch.cat((image_descriptor,view_direction),2)
+                    output = model(data)
+                    current_loss = VGG_loss(output,image_output)
+                    current_loss.backward()
+                    optimizer.step()
+
+                    input_gradient = torch.autograd.grad(current_loss,image_descriptor)
+
+                    input_gradient_all[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] = input_gradient[0] + input_gradient_all[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]
+                    count[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] = count[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] + 1
+
+                if renew_input:
+                    input_gradient_all = input_gradient_all/(count+1e-10)
+                    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0, n, v, u, :]
+
+            elif not random_crop:
                 optimizer.zero_grad()
                 data = torch.cat((image_descriptor,view_direction),2)
                 output = model(data)
                 current_loss = VGG_loss(output,image_output)
                 current_loss.backward()
                 optimizer.step()
-                
+                input_gradient = torch.autograd.grad(current_loss,image_descriptor)
+
                 if renew_input:
-                    input_gradient = torch.autograd.grad(current_loss,image_descriptor)
                     descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient[0][0, n, v, u, :]
             
             all[i] = current_loss*255.0
