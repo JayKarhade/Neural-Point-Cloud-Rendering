@@ -49,7 +49,7 @@ def VGG_loss(network_output,GT,reuse=False):
     real_l = LossNetwork(real)
 
     p = []
-
+    p.append(compute_error(real,fake))
     for i in range(len(fake_l)):
         tmp1 = fake_l[i].cpu().numpy()
         tmp2 = real_l[i].cpu().numpy()
@@ -58,4 +58,4 @@ def VGG_loss(network_output,GT,reuse=False):
         print(compute_error(tmp1,tmp2))
         p.append(compute_error(tmp1,tmp2))
     
-    return p[0],p[1],p[2],p[3],p[4],sum(p)
+    return p[0],p[1],p[2],p[3],p[4],p[5],sum(p)
