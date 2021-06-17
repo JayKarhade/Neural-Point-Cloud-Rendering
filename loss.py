@@ -35,18 +35,22 @@ def compute_error(real,fake):
 
 #Compute VGG Loss between real and fake
 def VGG_loss(network_output,GT,reuse=False):
+    print(GT.shape)
+    print(network_output.shape)
+    network_output = torch.from_numpy(network_output)
     ##Check dataformat of network output
     # since we use OpenCV to read and write image, bgr to rgb.
-    network_output_RGB = torch.cat([network_output[:, :, :, 2:3], network_output[:, :, :, 1:2], network_output[:, :, :, 0:1]], axis=3)
-    GT_RGB = torch.cat([GT[:, :, :, 2:3], GT[:, :, :, 1:2], GT[:, :, :, 0:1]], axis=3)
-
-    fake = network_output_RGB*255.0
-    real = GT_RGB*255.0
+    #GT_RGB = torch.cat((GT[:, :, :, 2], GT[:, :, :, 1], GT[:, :, :, 0]), axis=3)
+    #network_output_RGB = torch.cat((network_output[:, :, :, 2], network_output[:, :, :, 1], network_output[:, :, :, 0]), axis=3)
+    GT = GT.permute(0,3,1,2)
+    network_output  = network_output.permute(0,3,1,2)
+    fake = network_output*255.0
+    real = GT*255.0
 
     loss_network = LossNetwork()
 
-    fake_l = LossNetwork(fake)
-    real_l = LossNetwork(real)
+    real_l = loss_network(real.float())
+    fake_l = loss_network(fake.float())
 
     p = []
     p.append(compute_error(real,fake))
