@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torch.optim as optim
 
-is_training = False  # if test, set this 'False'
+is_training = True  # if test, set this 'False'
 use_viewdirection = True  # use view direction
 renew_input = True   # optimize input point features.
 constant_initial = True  # use constant value for initialization.
@@ -42,12 +42,13 @@ learning_rate_1 = 0.01  # initial learning rate for input point features.
 
 dataset = 'ScanNet'     # datasets
 scene = 'scene0010_00'  # scene name
-task = '%s_npcr_%s' % (dataset, scene)  # task name, also path of checkpoints file
-dir1 = 'data/%s/%s/color/' % (dataset, scene)  # path of color image
-dir2 = 'data/%s/%s/pose/' % (dataset, scene)  # path of camera poses.
-dir3 = 'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, scene, d)  # voxelization information path.
-dir4 = 'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
-dir5 = 'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
+root = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/'
+task = root+'%s_npcr_%s' % (dataset, scene)  # task name, also path of checkpoints file
+dir1 = root+'data/%s/%s/color/' % (dataset, scene)  # path of color image
+dir2 = root+'data/%s/%s/pose/' % (dataset, scene)  # path of camera poses.
+dir3 = root+'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, scene, d)  # voxelization information path.
+dir4 = root+'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
+dir5 = root+'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
 
 num_image = len(glob.glob(os.path.join(dir1, '*.jpg')))
 
@@ -72,10 +73,11 @@ else:
     if use_RGB:
         descriptors[0, :, 0:3] = np.transpose(point_clouds_colors) / 255.0
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
+#os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 
-model = UNet.cuda()
-opt = optim.Adam(model.parameters,lr=learning_rate)
+model = UNet()
+model.cuda()
+opt = optim.Adam(model.parameters(),lr=learning_rate)
 
 if is_training==True:
 
@@ -142,7 +144,8 @@ if is_training==True:
             view_direction[0, n, v, u, :] = view_direction[0, n, v, u, :] / (np.tile(np.linalg.norm(view_direction[0, n, v, u, :], axis=1, keepdims=True), (1, 3)) + 1e-10)
 
             image_output = np.expand_dims(cv2.resize(cv2.imread(image_name, -1), (w, h)), axis=0) / 255.0
-
+            image_descriptor = torch.from_numpy(image_descriptor).permute(0,4,1,2,3).cuda()
+            view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).cuda()
             if random_crop:
 
                 # limitation of memory etc, we crop the image.
@@ -164,13 +167,21 @@ if is_training==True:
                         top_left_u = w_croped - movement_u
                         top_left_v = h_croped - movement_v
 
-                    optimizer.zero_grad()
-                    data = torch.cat((image_descriptor,view_direction),2)
-                    output = model(data)
-                    current_loss = VGG_loss(output,image_output)
-                    current_loss.backward()
-                    optimizer.step()
+                    print("image descriptor",image_descriptor.shape)
+                    print("view direction", view_direction.shape)
+                    opt.zero_grad()
 
+                    data = torch.cat((image_descriptor,view_direction),1)
+                    output = model(data)
+                    output = np.array(output)
+                    #output = (output)
+                    #print('output',output.shape)
+                    current_loss = VGG_loss(output,torch.from_numpy(image_output))
+                    print('loss')
+                    current_loss.backward()
+                    print('backprop')
+                    opt.step()
+                    print('step')
                     input_gradient = torch.autograd.grad(current_loss,image_descriptor)
 
                     input_gradient_all[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] = input_gradient[0] + input_gradient_all[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]
@@ -181,12 +192,12 @@ if is_training==True:
                     descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0, n, v, u, :]
 
             elif not random_crop:
-                optimizer.zero_grad()
-                data = torch.cat((image_descriptor,view_direction),2)
+                opt.zero_grad()
+                data = torch.cat((image_descriptor,view_direction),1)
                 output = model(data)
                 current_loss = VGG_loss(output,image_output)
                 current_loss.backward()
-                optimizer.step()
+                opt.step()
                 input_gradient = torch.autograd.grad(current_loss,image_descriptor)
 
                 if renew_input:
@@ -203,7 +214,7 @@ if is_training==True:
             'model_state_dict':model.state_dict(),
             'optimizer_state_dict':optimizer.state_dict(),
             'loss': current_loss
-                    },'path for checkpoint')
+                    },'%s/%04d/model_pytorch' % (task, epoch))
         io.savemat("%s/" % task + 'descriptor.mat', {'descriptors': descriptors})
 
         if epoch % 5 == 0:
@@ -213,7 +224,7 @@ if is_training==True:
                 'model_state_dict':model.state_dict(),
                 'optimizer_state_dict':optimizer.state_dict(),
                 'loss': current_loss
-                        },'path for checkpoint between 5 models')
+                        },'%s/%04d/model_pytorch' % (task, epoch))
             io.savemat("%s/%04d/" % (task, epoch) + 'descriptor.mat', {'descriptors': descriptors})
 
 
