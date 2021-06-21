@@ -31,35 +31,43 @@ class LossNetwork(torch.nn.Module):
         return LossOutput(**output)
 
 def compute_error(real,fake):
-  return np.mean(np.abs(fake-real),axis=[1,2,3])
+  real = real.cuda()
+  fake = fake.cuda()
+  return torch.mean(torch.abs(fake-real),axis=[1,2,3]).cuda()
 
 #Compute VGG Loss between real and fake
 def VGG_loss(network_output,GT,reuse=False):
-    print(GT.shape)
-    print(network_output.shape)
-    network_output = torch.from_numpy(network_output)
+    #print(GT.shape)
+    #print(network_output.shape)
+    #network_output = torch.from_numpy(network_output)
     ##Check dataformat of network output
     # since we use OpenCV to read and write image, bgr to rgb.
     #GT_RGB = torch.cat((GT[:, :, :, 2], GT[:, :, :, 1], GT[:, :, :, 0]), axis=3)
     #network_output_RGB = torch.cat((network_output[:, :, :, 2], network_output[:, :, :, 1], network_output[:, :, :, 0]), axis=3)
     GT = GT.permute(0,3,1,2)
-    network_output  = network_output.permute(0,3,1,2)
+    #network_output  = network_output.permute(0,3,1,2)
     fake = network_output*255.0
     real = GT*255.0
-
-    loss_network = LossNetwork()
-
-    real_l = loss_network(real.float())
-    fake_l = loss_network(fake.float())
-
+    #print('c1')
+    loss_network = LossNetwork().cuda()
+    #print('c2')
+    real_l = loss_network(real.float().cuda())
+    fake_l = loss_network(fake.float().cuda())
+    #print('c3')
     p = []
-    p.append(compute_error(real,fake))
+    p.append(compute_error(real.cuda(),fake.cuda()))
     for i in range(len(fake_l)):
-        tmp1 = fake_l[i].cpu().numpy()
-        tmp2 = real_l[i].cpu().numpy()
-        print("Tmp1",i, np.mean(tmp1), np.std(tmp1))
-        print("Tmp2",i,np.mean(tmp2),np.std(tmp2))
-        print(compute_error(tmp1,tmp2))
-        p.append(compute_error(tmp1,tmp2))
-    
+        tmp1 = fake_l[i]
+        tmp2 = real_l[i]
+        #print("Tmp1",i, torch.mean(tmp1), torch.std(tmp1))
+        #print("Tmp2",i,torch.mean(tmp2),torch.std(tmp2))
+        #print(compute_error(tmp1.cuda(),tmp2.cuda()))
+        p.append(compute_error(tmp1.cuda(),tmp2.cuda()))
+    #print("total loss",sum(p))
     return p[0],p[1],p[2],p[3],p[4],p[5],sum(p)
+
+if __name__ == '__main__':
+  x1 = torch.rand(1,480,640,3)
+  x2 = torch.rand(1,3,480,640)
+  z = VGG_loss(x2,x1)[6]
+  print(z)

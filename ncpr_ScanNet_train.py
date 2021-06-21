@@ -1,21 +1,31 @@
 from numpy.core.fromnumeric import shape
 from torch.optim import optimizer
-from network import *
+from network_pytorch import *
 import cv2, os, time, math
 import glob
 import scipy.io as io
-from loss import *
+from loss_pytorch import *
 from utils import *
 
 ##Pytorch Imports
-import torch
+import torch,gc
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torch.optim as optim
+gc.collect()
+torch.cuda.empty_cache()
+
+#Nvidia
+import nvidia_smi
+
+nvidia_smi.nvmlInit()
+handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+res = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
+#print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
 
 is_training = True  # if test, set this 'False'
 use_viewdirection = True  # use view direction
-renew_input = True   # optimize input point features.
+renew_input = False   # optimize input point features.
 constant_initial = True  # use constant value for initialization.
 use_RGB = True     # use RGB information for initialization.
 random_crop = True  # crop image.
@@ -34,7 +44,7 @@ channels_i = int(8)  # dimension of input point features
 channels_o = 3  # output image dimensions
 channels_v = 3  # view direction dimensions
 
-gpu_id = 3
+gpu_id = 0
 num_epoch = 21
 decrease_epoch = 7  # epochs, learning_rate_1 decreased.
 learning_rate = 0.0001  # learning rate for network parameters optimization
@@ -80,7 +90,7 @@ model.cuda()
 opt = optim.Adam(model.parameters(),lr=learning_rate)
 
 if is_training==True:
-
+    model.train()
     print('begin training!')
     all = np.zeros(20000, dtype=float)
     cnt = 0
@@ -102,7 +112,9 @@ if is_training==True:
             image_descriptor = np.zeros([1, d, h, w, channels_i], dtype=np.float32)
             view_direction = np.zeros([1, d, h, w, channels_v], dtype=np.float32)
             input_gradient_all = np.zeros([1, d, h, w, channels_i], dtype=np.float32)
+            #input_gradient_all = torch.from_numpy(input_gradient_all).cuda()
             count = np.zeros([1, d, h, w, 1], dtype=np.float32)
+            #count = torch.from_numpy(count).cuda()
             camera_name = camera_names_train[i]
             index_name = index_names_train[i]
             image_name = image_names_train[i]
@@ -166,30 +178,38 @@ if is_training==True:
                     if j==3:
                         top_left_u = w_croped - movement_u
                         top_left_v = h_croped - movement_v
-
-                    print("image descriptor",image_descriptor.shape)
-                    print("view direction", view_direction.shape)
+                    ##Resize image      
+                    #image_descriptor = image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
+                    #view_direction = view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
+                    #image_output = image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]
+                     
+                    #image_descriptor = (image_descriptor).permute(0,4,1,2,3)#.cuda()
+                    #view_direction = (view_direction).permute(0,4,1,2,3)#.cuda()
+                    #print("image descriptor",image_descriptor.shape)
+                    #print("view direction", view_direction.shape)
                     opt.zero_grad()
 
-                    data = torch.cat((image_descriptor,view_direction),1)
+                    data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1)
+                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     output = model(data)
-                    output = np.array(output)
-                    #output = (output)
-                    #print('output',output.shape)
-                    current_loss = VGG_loss(output,torch.from_numpy(image_output))
-                    print('loss')
-                    current_loss.backward()
+                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
+                    current_loss = VGG_loss(output[2],torch.from_numpy(image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]))[6]
+                    print('loss')##Running out of memory here
+                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     print('backprop')
+                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     opt.step()
+                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     print('step')
-                    input_gradient = torch.autograd.grad(current_loss,image_descriptor)
+                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
+                    #input_gradient = torch.autograd.grad(current_loss,image_descriptor)
 
-                    input_gradient_all[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] = input_gradient[0] + input_gradient_all[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]
-                    count[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] = count[:, :, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :] + 1
+                    #input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = input_gradient[0] + input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
+                    #count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + 1
 
-                if renew_input:
-                    input_gradient_all = input_gradient_all/(count+1e-10)
-                    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0, n, v, u, :]
+                #if renew_input:
+                #    input_gradient_all = input_gradient_all/(count+1e-10)
+                #    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0, n, v, u, :]
 
             elif not random_crop:
                 opt.zero_grad()
@@ -226,5 +246,3 @@ if is_training==True:
                 'loss': current_loss
                         },'%s/%04d/model_pytorch' % (task, epoch))
             io.savemat("%s/%04d/" % (task, epoch) + 'descriptor.mat', {'descriptors': descriptors})
-
-
