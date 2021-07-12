@@ -1,9 +1,9 @@
 from numpy.core.fromnumeric import shape
-from network import *
+from network_pytorch import *
 import cv2, os, time, math
 import glob
 import scipy.io as io
-from loss import *
+from loss_pytorch import *
 from utils import *
 
 ##Pytorch Imports
@@ -13,7 +13,7 @@ from torch.autograd import Variable
 
 is_training = False  # if test, set this 'False'
 use_viewdirection = True  # use view direction
-renew_input = True   # optimize input point features.
+renew_input = False   # optimize input point features.
 constant_initial = True  # use constant value for initialization.
 use_RGB = True     # use RGB information for initialization.
 random_crop = True  # crop image.
@@ -32,7 +32,7 @@ channels_i = int(8)  # dimension of input point features
 channels_o = 3  # output image dimensions
 channels_v = 3  # view direction dimensions
 
-gpu_id = 3
+gpu_id = 0
 num_epoch = 21
 decrease_epoch = 7  # epochs, learning_rate_1 decreased.
 learning_rate = 0.0001  # learning rate for network parameters optimization
@@ -40,12 +40,19 @@ learning_rate_1 = 0.01  # initial learning rate for input point features.
 
 dataset = 'ScanNet'     # datasets
 scene = 'scene0010_00'  # scene name
-task = '%s_npcr_%s' % (dataset, scene)  # task name, also path of checkpoints file
-dir1 = 'data/%s/%s/color/' % (dataset, scene)  # path of color image
-dir2 = 'data/%s/%s/pose/' % (dataset, scene)  # path of camera poses.
-dir3 = 'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, scene, d)  # voxelization information path.
-dir4 = 'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
-dir5 = 'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
+root = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/'
+task = root+'%s_npcr_%s' % (dataset, scene)  # task name, also path of checkpoints file
+dir1 = root+'data/%s/%s/color/' % (dataset, scene)  # path of color image
+dir2 = root+'data/%s/%s/pose/' % (dataset, scene)  # path of camera poses.
+dir3 = root+'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, scene, d)  # voxelization information path.
+dir4 = root+'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
+dir5 = root+'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
+
+PATH = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/model_pytorch'
+state = torch.load(PATH)
+model = UNet()
+model.cuda()
+model.load_state_dict(state['model_state_dict'])
 
 num_image = len(glob.glob(os.path.join(dir1, '*.jpg')))
 
@@ -75,13 +82,12 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 #input1 = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
 #input2 = torch.tensor([1,channels_v,d,-1,-1],dtype=torch.float32)
 #output = torch.tensor([1,channels_i,d,-1,-1],dtype=torch.float32)
-PATH = 'give path here'
-model = UNet.cuda()
-model.load_state_dict(torch.load(PATH))
 
 
 if not is_training:
-    output_path = "%s/TestResult/" % (task)
+    top_left_v = 120
+    top_left_u = 160
+    output_path = "%s/TestResultpytorch/" % (task)
     if not os.path.isdir(output_path):
         os.makedirs(output_path)
     
@@ -108,6 +114,14 @@ if not is_training:
         distance = npzfile['distance']
         each_split_max_num = npzfile['each_split_max_num']
 
+        # load weight
+        npzfile_weight = np.load(index_name_1)
+        weight = npzfile_weight['weight_average']
+        distance_to_depth_min = npzfile_weight['distance_to_depth_min']
+
+        extrinsic_matrix = CameraPoseRead(camera_name)  # camera to world
+        camera_position = np.transpose(extrinsic_matrix[0:3, 3])
+
         max_num = np.max(each_split_max_num)
         group_descriptor = np.zeros([(max(group_belongs + 1)), max_num, channels_i], dtype=np.float32)
         group_descriptor[group_belongs, index_in_each_group, :] = descriptors[0, select_index, :] * np.expand_dims(weight, axis=1)
@@ -124,12 +138,20 @@ if not is_training:
         #.result = np.minimum(np.maximum(result, 0.0), 1.0) * 255.0
         #Assumes PATH provided
         #Concatenate image descriptor and view_direction inputs
-        data = torch.cat((image_descriptor,view_direction),2)
+        image_descriptor = torch.from_numpy(image_descriptor).permute(0,4,1,2,3).cuda()
+        view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).cuda()
+
+        data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],
+                          view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1).cuda()
         model.eval()
-        result = model(data) 
+        result = model(data.float())
+        result = result[2]
+        result = result.permute(0,2,3,1)
+        result = result.detach().to('cpu').numpy()#.squeeze().data.cpu().numpy()
         #.
         ####
         result = np.minimum(np.maximum(result, 0.0), 1.0) * 255.0
+        print(result[0,:,:,:].shape)
         cv2.imwrite(output_path + '%06d.png' % id, np.uint8(result[0, :, :, :]))
 
 if __name__=='__main__':
