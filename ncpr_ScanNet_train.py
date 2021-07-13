@@ -12,16 +12,10 @@ import torch,gc
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
+
 gc.collect()
 torch.cuda.empty_cache()
-
-#Nvidia
-import nvidia_smi
-
-nvidia_smi.nvmlInit()
-handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
-res = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
-#print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
 
 is_training = True  # if test, set this 'False'
 use_viewdirection = True  # use view direction
@@ -52,13 +46,16 @@ learning_rate_1 = 0.01  # initial learning rate for input point features.
 
 dataset = 'ScanNet'     # datasets
 scene = 'scene0010_00'  # scene name
-root = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/'
+root = '/home/zhy/Desktop/jay/PCD_Rendering/Neural-Point-Cloud-Rendering-via-Multi-Plane-Projection/'
 task = root+'%s_npcr_%s' % (dataset, scene)  # task name, also path of checkpoints file
 dir1 = root+'data/%s/%s/color/' % (dataset, scene)  # path of color image
 dir2 = root+'data/%s/%s/pose/' % (dataset, scene)  # path of camera poses.
 dir3 = root+'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, scene, d)  # voxelization information path.
 dir4 = root+'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
 dir5 = root+'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
+
+#tensorboard dir
+writer = SummaryWriter(root+'runs/test')
 
 num_image = len(glob.glob(os.path.join(dir1, '*.jpg')))
 
@@ -89,6 +86,17 @@ model = UNet()
 model.cuda()
 opt = optim.Adam(model.parameters(),lr=learning_rate)
 
+#state  = torch.load('/home/zhy/Desktop/jay/PCD_Rendering/Neural-Point-Cloud-Rendering-via-Multi-Plane-#Projection/ScanNet_npcr_scene0010_00/model_pytorch')
+#if state:
+#  print('found previous checkpoint')
+#  model.load_state_dict(state['model_state_dict'])
+#  opt.load_state_dict(state['optimizer_state_dict'])
+
+def adjust_learning_rate(optimizer, lrd):
+    for param_group in optimizer.param_groups:
+        print('lr decay from {} to {}'.format(param_group['lr'], param_group['lr'] * lrd))
+        param_group['lr'] *= lrd
+
 if is_training==True:
     model.train()
     print('begin training!')
@@ -96,16 +104,23 @@ if is_training==True:
     cnt = 0
 
     for epoch in range(num_epoch):
-
+        #print(epoch)
         if epoch >= decrease_epoch:
             learning_rate_1 = 0.005
+            adjust_learning_rate(opt,learning_rate_1)
 
         if epoch >= decrease_epoch*2:
             learning_rate_1 = 0.001
+            adjust_learning_rate(opt,learning_rate_1)
 
         if os.path.isdir("%s/%04d" % (task, epoch)):
+            print("checkpoint exists")
             continue
-
+        else:
+          os.makedirs("%s/%04d" % (task, epoch))
+        print("train data len",len(image_names_train))
+        print("test data len",len(image_names_test))
+        
         for i in np.random.permutation(len(image_names_train)):
         # for i in range(4):
             st = time.time()
@@ -190,18 +205,13 @@ if is_training==True:
                     opt.zero_grad()
 
                     data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1)
-                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     output = model(data)
-                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     current_loss = VGG_loss(output[2],torch.from_numpy(image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]))[6]
                     print('loss')##Running out of memory here
-                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
+                    current_loss.backward()
                     print('backprop')
-                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
                     opt.step()
-                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
-                    print('step')
-                    #print(f'gpu: {res.gpu}%, gpu-mem: {res.memory}%')
+                    print('step')                    
                     #input_gradient = torch.autograd.grad(current_loss,image_descriptor)
 
                     #input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = input_gradient[0] + input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
@@ -226,23 +236,43 @@ if is_training==True:
             all[i] = current_loss*255.0
             cnt = cnt+1
             print('%s %s %s %.2f %.2f %s' % (epoch, i, cnt, current_loss, np.mean(all[np.where(all)]), time.time() - st))
-        
-        os.makedirs("%s/%04d" % (task, epoch))
+
+            if cnt%100==0:
+              print('%s/model_pytorch' % (task))
+              ##saving at general checkpoint
+              torch.save({
+                'epoch':epoch,
+                'model_state_dict':model.state_dict(),
+                'optimizer_state_dict':opt.state_dict(),
+                'loss': current_loss
+                          },'%s/model_pytorch' % (task))
+              ##saving at epoch specific directory checkpoint
+              torch.save({
+            'epoch':epoch,
+            'model_state_dict':model.state_dict(),
+            'optimizer_state_dict':opt.state_dict(),
+            'loss': current_loss
+                    },'%s/%04d/model_pytorch' % (task, epoch))
+
+              io.savemat("%s/" % task + 'descriptorpytorch.mat', {'descriptors': descriptors})
+            writer.add_scalar('training_loss',current_loss,cnt)
+#        os.makedirs("%s/%04d" % (task, epoch))
 #        saver.save(sess, "%s/model.ckpt" % (task))
         torch.save({
             'epoch':epoch,
             'model_state_dict':model.state_dict(),
-            'optimizer_state_dict':optimizer.state_dict(),
+            'optimizer_state_dict':opt.state_dict(),
             'loss': current_loss
                     },'%s/%04d/model_pytorch' % (task, epoch))
-        io.savemat("%s/" % task + 'descriptor.mat', {'descriptors': descriptors})
+        io.savemat("%s/" % task + 'descriptorpytorch.mat', {'descriptors': descriptors})
 
         if epoch % 5 == 0:
 #            saver.save(sess, "%s/%04d/model.ckpt" % (task, epoch))
             torch.save({
                 'epoch':epoch,
                 'model_state_dict':model.state_dict(),
-                'optimizer_state_dict':optimizer.state_dict(),
+                'optimizer_state_dict':opt.state_dict(),
                 'loss': current_loss
                         },'%s/%04d/model_pytorch' % (task, epoch))
-            io.savemat("%s/%04d/" % (task, epoch) + 'descriptor.mat', {'descriptors': descriptors})
+            io.savemat("%s/%04d/" % (task, epoch) + 'descriptorpytorch.mat', {'descriptors': descriptors})
+
