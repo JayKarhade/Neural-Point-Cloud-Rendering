@@ -21,8 +21,8 @@ random_crop = True  # crop image.
 d = 32   # how many planes are used, identity with pre-processing.
 h = 480  # image height, identity with pre-processing.
 w = 640  # image width, identity with pre-processing.
-top_left_v = 0  # top left position
-top_left_u = 0  # top left position
+top_left_v = 120  # top left position
+top_left_u = 160  # top left position
 h_croped = 240  # crop size height
 w_croped = 320  # crop size width
 forward_time = 4  # optimize input point features after cropping 4 times on one image.
@@ -32,6 +32,7 @@ channels_i = int(8)  # dimension of input point features
 channels_o = 3  # output image dimensions
 channels_v = 3  # view direction dimensions
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 gpu_id = 0
 num_epoch = 21
 decrease_epoch = 7  # epochs, learning_rate_1 decreased.
@@ -48,10 +49,10 @@ dir3 = root+'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, sce
 dir4 = root+'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
 dir5 = root+'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
 
-PATH = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/model_pytorch'
+PATH = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/remote_model_pytorch'
 state = torch.load(PATH)
 model = UNet()
-model.cuda()
+model.to(device)
 model.load_state_dict(state['model_state_dict'])
 
 num_image = len(glob.glob(os.path.join(dir1, '*.jpg')))
@@ -66,8 +67,8 @@ num_points = point_clouds.shape[1]
 # initial descriptor
 descriptors = np.random.normal(0, 1, (1, num_points, channels_i))
 
-if os.path.isfile('%s/descriptor.mat' % task):
-    content = io.loadmat('%s/descriptor.mat' % task)
+if os.path.isfile('%s/remote_descriptor.mat' % task):
+    content = io.loadmat('%s/remote_descriptor.mat' % task)
     descriptors = content['descriptors']
     print('loaded descriptors.')
 else:
@@ -85,8 +86,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 
 
 if not is_training:
-    top_left_v = 120
-    top_left_u = 160
+
     output_path = "%s/TestResultpytorch/" % (task)
     if not os.path.isdir(output_path):
         os.makedirs(output_path)
@@ -138,11 +138,11 @@ if not is_training:
         #.result = np.minimum(np.maximum(result, 0.0), 1.0) * 255.0
         #Assumes PATH provided
         #Concatenate image descriptor and view_direction inputs
-        image_descriptor = torch.from_numpy(image_descriptor).permute(0,4,1,2,3).cuda()
-        view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).cuda()
+        image_descriptor = torch.from_numpy(image_descriptor).permute(0,4,1,2,3).to(device)
+        view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).to(device)
 
         data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],
-                          view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1).cuda()
+                          view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1).to(device)
         model.eval()
         result = model(data.float())
         result = result[2]
