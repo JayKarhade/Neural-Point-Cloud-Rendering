@@ -15,30 +15,38 @@ def mse(imageA, imageB):
 	# the two images are
 	return err
 def SSIM(imageA, imageB, title):
-	# compute the mean squared error and structural similarity
-	# index for the images
-	m = mse(imageA, imageB)
-	s = ssim(imageA, imageB)
-	# setup the figure
-	fig = plt.figure(title)
-	plt.suptitle("MSE: %.2f, SSIM: %.2f" % (m, s))
-	# show first image
-	ax = fig.add_subplot(1, 2, 1)
-	plt.imshow(imageA, cmap = plt.cm.gray)
-	plt.axis("off")
-	# show the second image
-	ax = fig.add_subplot(1, 2, 2)
-	plt.imshow(imageB, cmap = plt.cm.gray)
-	plt.axis("off")
-	# show the images
-	plt.show()
-  
-original = cv2.imread("path to original")
-contrast = cv2.imread("path to synthesized")
-original = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
-contrast = cv2.cvtColor(contrast, cv2.COLOR_BGR2GRAY)
+  m = mse(imageA, imageB)
+  s = ssim(imageA, imageB)
+  fig = plt.figure(title)
+  plt.suptitle("MSE: %.2f, SSIM: %.2f" % (m, s))
+  # show first image
+  ax = fig.add_subplot(1, 2, 1)
+  plt.imshow(imageA, cmap = plt.cm.gray)
+  plt.axis("off")
+  # show the second image
+  ax = fig.add_subplot(1, 2, 2)
+  plt.imshow(imageB, cmap = plt.cm.gray)
+  plt.axis("off")
+  # show the images
+  plt.show()
+  return s
 
-# show the figure
-plt.show()
-# compare the images
-SSIM(original, contrast, "Original vs. Contrast")
+ssim_sum=0
+for i in range(1,13):
+  original = cv2.imread("/content/drive/MyDrive/Neural-Point-Cloud-Rendering/data/ScanNet/scene0010_00/color/"+str(i)+"99.jpg")
+  original = cv2.cvtColor(original,cv2.COLOR_BGR2RGB)
+  original = cv2.resize(original,(640,480))
+  #print(original.shape)
+  original  = np.asarray(original[120:(120+240),160:(160+320),:])
+  contrast = cv2.imread("/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/TestResultpytorch/"+"{0:0=6d}".format(i)+".png")
+  original = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+  contrast = cv2.cvtColor(contrast, cv2.COLOR_BGR2GRAY)
+
+  # show the figure
+  #plt.show()
+  # compare the images
+  print(i)
+  s = SSIM(original, contrast, "Original vs. Contrast")
+  ssim_sum = ssim_sum + s
+
+print(ssim_sum/12) 
