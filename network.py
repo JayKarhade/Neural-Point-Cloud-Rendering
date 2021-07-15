@@ -3,16 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import numpy as np
-
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #Upsampling layers 
 def upsample_and_concat3D(x1, x2, output_channels, in_channels, only_depth_dims=False):
   if  only_depth_dims:
     deconv = nn.ConvTranspose3d(in_channels,output_channels,kernel_size =(2,1,1),stride=(2,1,1))
-    deconv = deconv.cuda()
+    deconv = deconv.to(device)
     return (torch.cat((deconv(x1),x2),1))
   else:
     deconv = nn.ConvTranspose3d(in_channels,output_channels,kernel_size =(2,2,2),stride=(2,2,2))
-    deconv = deconv.cuda()
+    deconv = deconv.to(device)
     #print("deconv",deconv(x1).shape)
     print(type(deconv(x1)))
     return (torch.cat((deconv(x1),x2),1))
@@ -107,8 +107,8 @@ class UNet(nn.Module):
 if __name__ == '__main__':
   from torch.autograd import Variable
   data = Variable(torch.rand(1,11,32,240,320))
-  data = data.cuda()#conversion to cuda
-  net = UNet().cuda()#conversion to cuda
+  data = data.to(device)#conversion to cuda
+  net = UNet().to(device)#conversion to cuda
   z = net(data)
   print(z[2].shape)
   print(z[1].shape)
