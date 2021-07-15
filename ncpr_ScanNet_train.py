@@ -38,6 +38,7 @@ channels_i = int(8)  # dimension of input point features
 channels_o = 3  # output image dimensions
 channels_v = 3  # view direction dimensions
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 gpu_id = 0
 num_epoch = 21
 decrease_epoch = 7  # epochs, learning_rate_1 decreased.
@@ -46,7 +47,7 @@ learning_rate_1 = 0.01  # initial learning rate for input point features.
 
 dataset = 'ScanNet'     # datasets
 scene = 'scene0010_00'  # scene name
-root = '/home/zhy/Desktop/jay/PCD_Rendering/Neural-Point-Cloud-Rendering-via-Multi-Plane-Projection/'
+root = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/'
 task = root+'%s_npcr_%s' % (dataset, scene)  # task name, also path of checkpoints file
 dir1 = root+'data/%s/%s/color/' % (dataset, scene)  # path of color image
 dir2 = root+'data/%s/%s/pose/' % (dataset, scene)  # path of camera poses.
@@ -83,19 +84,18 @@ else:
 #os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 
 model = UNet()
-model.cuda()
+model.to(device)
 opt = optim.Adam(model.parameters(),lr=learning_rate)
 
-#state  = torch.load('/home/zhy/Desktop/jay/PCD_Rendering/Neural-Point-Cloud-Rendering-via-Multi-Plane-#Projection/ScanNet_npcr_scene0010_00/model_pytorch')
+#state  = torch.load('/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/model_pytorch')
 #if state:
 #  print('found previous checkpoint')
 #  model.load_state_dict(state['model_state_dict'])
 #  opt.load_state_dict(state['optimizer_state_dict'])
-
 def adjust_learning_rate(optimizer, lrd):
-    for param_group in optimizer.param_groups:
-        print('lr decay from {} to {}'.format(param_group['lr'], param_group['lr'] * lrd))
-        param_group['lr'] *= lrd
+  for param_group in optimizer.param_groups:
+    print('lr decay from {} to {}'.format(param_group['lr'], param_group['lr'] * lrd))
+    param_group['lr'] *= lrd
 
 if is_training==True:
     model.train()
@@ -107,11 +107,11 @@ if is_training==True:
         #print(epoch)
         if epoch >= decrease_epoch:
             learning_rate_1 = 0.005
-            adjust_learning_rate(opt,learning_rate_1)
+            #adjust_learning_rate(opt,learning_rate_1) ##for future if required
 
         if epoch >= decrease_epoch*2:
             learning_rate_1 = 0.001
-            adjust_learning_rate(opt,learning_rate_1)
+            #adjust_learning_rate(opt,learning_rate_1) ##for future if required
 
         if os.path.isdir("%s/%04d" % (task, epoch)):
             print("checkpoint exists")
@@ -171,8 +171,12 @@ if is_training==True:
             view_direction[0, n, v, u, :] = view_direction[0, n, v, u, :] / (np.tile(np.linalg.norm(view_direction[0, n, v, u, :], axis=1, keepdims=True), (1, 3)) + 1e-10)
 
             image_output = np.expand_dims(cv2.resize(cv2.imread(image_name, -1), (w, h)), axis=0) / 255.0
-            image_descriptor = torch.from_numpy(image_descriptor).permute(0,4,1,2,3).cuda()
-            view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).cuda()
+            image_descriptor = torch.from_numpy(image_descriptor).permute(0,4,1,2,3).to(device)
+            image_descriptor.requires_grad=True
+            view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).to(device)
+            view_direction.requires_grad=True
+            #img_desc_gradient = image_descriptor.clone().detach() ##Copy for input grad
+            #img_desc_gradient.requires_grad=True
             if random_crop:
 
                 # limitation of memory etc, we crop the image.
@@ -207,19 +211,18 @@ if is_training==True:
                     data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1)
                     output = model(data)
                     current_loss = VGG_loss(output[2],torch.from_numpy(image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]))[6]
-                    print('loss')##Running out of memory here
+                    print('loss')
                     current_loss.backward()
                     print('backprop')
                     opt.step()
                     print('step')                    
-                    #input_gradient = torch.autograd.grad(current_loss,image_descriptor)
-
+                    #input_gradient = (torch.autograd.grad(current_loss,image_descriptor,allow_unused=True))
                     #input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = input_gradient[0] + input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
                     #count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + 1
 
                 #if renew_input:
                 #    input_gradient_all = input_gradient_all/(count+1e-10)
-                #    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0, n, v, u, :]
+                #    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0,n, v, u,:]
 
             elif not random_crop:
                 opt.zero_grad()
@@ -228,10 +231,10 @@ if is_training==True:
                 current_loss = VGG_loss(output,image_output)
                 current_loss.backward()
                 opt.step()
-                input_gradient = torch.autograd.grad(current_loss,image_descriptor)
+                #input_gradient = torch.autograd.grad(current_loss,image_descriptor)
 
-                if renew_input:
-                    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient[0][0, n, v, u, :]
+                #if renew_input:
+                #    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient[0][0, n, v, u, :]
             
             all[i] = current_loss*255.0
             cnt = cnt+1
@@ -275,4 +278,5 @@ if is_training==True:
                 'loss': current_loss
                         },'%s/%04d/model_pytorch' % (task, epoch))
             io.savemat("%s/%04d/" % (task, epoch) + 'descriptorpytorch.mat', {'descriptors': descriptors})
+
 
