@@ -94,9 +94,9 @@ class UNet(nn.Module):
     #print("up5:",up5.shape)
     conv11 = F.leaky_relu(self.conv11(up5),0.1)
     #print("conv11",conv11.shape)
-    conv12 = F.leaky_relu(self.conv12(conv11),0.1)
+    conv12 = (self.conv12(conv11),0.1)
     #print("conv12",conv12.shape)
-    conv12_1 = F.leaky_relu(self.conv12_1(conv11),0.1)
+    conv12_1 = (self.conv12_1(conv11),0.1)
     #print("conv12_1",conv12_1.shape)
 
     weight = torch.nn.functional.softmax(conv12_1,dim=1)
