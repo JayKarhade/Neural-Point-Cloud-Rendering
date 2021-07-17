@@ -60,14 +60,12 @@ def VGG_loss(network_output,GT,reuse=False):
     fake_l = loss_network(fake.float().to(device))
     #print('c3')
     p = []
+    div_nums = [1.6,2.3,1.8,2.8,12.5]##Constant used to divide losses
     p.append(compute_error(real.to(device),fake.to(device)))
     for i in range(len(fake_l)):
         tmp1 = fake_l[i]
         tmp2 = real_l[i]
-        #print("Tmp1",i, torch.mean(tmp1), torch.std(tmp1))
-        #print("Tmp2",i,torch.mean(tmp2),torch.std(tmp2))
-        #print(compute_error(tmp1.cuda(),tmp2.cuda()))
-        p.append(compute_error(tmp1.to(device),tmp2.to(device)))
+        p.append(compute_error(tmp1.to(device),tmp2.to(device))/div_nums[i])
     #print("total loss",sum(p))
     return p[0],p[1],p[2],p[3],p[4],p[5],sum(p)
 
