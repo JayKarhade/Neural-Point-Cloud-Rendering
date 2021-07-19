@@ -19,7 +19,7 @@ torch.cuda.empty_cache()
 
 is_training = True  # if test, set this 'False'
 use_viewdirection = True  # use view direction
-renew_input = False   # optimize input point features.
+renew_input = True   # optimize input point features.
 constant_initial = True  # use constant value for initialization.
 use_RGB = True     # use RGB information for initialization.
 random_crop = True  # crop image.
@@ -70,8 +70,8 @@ num_points = point_clouds.shape[1]
 # initial descriptor
 descriptors = np.random.normal(0, 1, (1, num_points, channels_i))
 
-if os.path.isfile('%s/descriptor.mat' % task):
-    content = io.loadmat('%s/descriptor.mat' % task)
+if os.path.isfile('%s/descriptorpytorch.mat' % task):
+    content = io.loadmat('%s/descriptorpytorch.mat' % task)
     descriptors = content['descriptors']
     print('loaded descriptors.')
 else:
@@ -81,11 +81,12 @@ else:
     if use_RGB:
         descriptors[0, :, 0:3] = np.transpose(point_clouds_colors) / 255.0
 
-#os.environ["CUDA_VISIBLE_DEVICES"] = "%s" % gpu_id
 
+##instantiate loss class and learning model
 model = UNet()
 model.to(device)
 opt = optim.Adam(model.parameters(),lr=learning_rate)
+VGG_loss = Perceptual_loss()
 
 #state  = torch.load('/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/model_pytorch')
 #if state:
@@ -127,9 +128,9 @@ if is_training==True:
             image_descriptor = np.zeros([1, d, h, w, channels_i], dtype=np.float32)
             view_direction = np.zeros([1, d, h, w, channels_v], dtype=np.float32)
             input_gradient_all = np.zeros([1, d, h, w, channels_i], dtype=np.float32)
-            #input_gradient_all = torch.from_numpy(input_gradient_all).cuda()
-            count = np.zeros([1, d, h, w, 1], dtype=np.float32)
-            #count = torch.from_numpy(count).cuda()
+            input_gradient_all = torch.from_numpy(input_gradient_all).permute(0,4,1,2,3).to(device)
+            count = np.zeros([1,1, d, h, w], dtype=np.float32)
+            #count = torch.from_numpy(count).permute(0,4,1,2,3).to(device)
             camera_name = camera_names_train[i]
             index_name = index_names_train[i]
             image_name = image_names_train[i]
@@ -207,22 +208,27 @@ if is_training==True:
                     #print("image descriptor",image_descriptor.shape)
                     #print("view direction", view_direction.shape)
                     opt.zero_grad()
-
                     data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1)
                     output = model(data)
-                    current_loss = VGG_loss(output[2],torch.from_numpy(image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]))[6]
+                    current_loss = VGG_loss.calc_loss(output[2],torch.from_numpy(image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]))[6]
                     print('loss')
-                    current_loss.backward()
+                    input_gradient = (torch.autograd.grad(current_loss,image_descriptor,allow_unused=True,retain_graph=True))
+                    current_loss.backward(retain_graph=False)
                     print('backprop')
                     opt.step()
                     print('step')                    
                     #input_gradient = (torch.autograd.grad(current_loss,image_descriptor,allow_unused=True))
-                    #input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = input_gradient[0] + input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
-                    #count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + 1
+                    print("input gradient all",input_gradient_all.shape)
+                    print("input gradient",input_gradient[0].shape)
+                    
+                    input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = input_gradient[0][:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
+                    count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + 1
 
-                #if renew_input:
-                #    input_gradient_all = input_gradient_all/(count+1e-10)
-                #    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0,n, v, u,:]
+                if renew_input:
+                    input_gradient_all=input_gradient_all.cpu().detach().numpy()
+                    input_gradient_all = input_gradient_all/(count+1e-10)
+                    print(type(descriptors))
+                    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0,:,n, v, u]
 
             elif not random_crop:
                 opt.zero_grad()
@@ -278,5 +284,3 @@ if is_training==True:
                 'loss': current_loss
                         },'%s/%04d/model_pytorch' % (task, epoch))
             io.savemat("%s/%04d/" % (task, epoch) + 'descriptorpytorch.mat', {'descriptors': descriptors})
-
-
