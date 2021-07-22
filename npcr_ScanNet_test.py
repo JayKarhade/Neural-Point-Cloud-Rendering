@@ -21,10 +21,10 @@ random_crop = True  # crop image.
 d = 32   # how many planes are used, identity with pre-processing.
 h = 480  # image height, identity with pre-processing.
 w = 640  # image width, identity with pre-processing.
-top_left_v = 120  # top left position
-top_left_u = 160  # top left position
-h_croped = 240  # crop size height
-w_croped = 320  # crop size width
+top_left_v = 0#120  # top left position
+top_left_u = 0#160  # top left position
+h_croped = 480#240  # crop size height
+w_croped = 640#320  # crop size width
 forward_time = 4  # optimize input point features after cropping 4 times on one image.
 overlap = 32  # size of overlap region of crops.
 
@@ -49,7 +49,7 @@ dir3 = root+'pre_processing_results/%s/%s/reproject_results_%s/' % (dataset, sce
 dir4 = root+'pre_processing_results/%s/%s/weight_%s/' % (dataset, scene, d)  # aggregation information path.
 dir5 = root+'pre_processing_results/%s/%s/point_clouds_simplified.ply' % (dataset, scene)  # point clouds file path
 
-PATH = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/remote_model_pytorch'
+PATH = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/ScanNet_npcr_scene0010_00/model_pytorch'
 state = torch.load(PATH)
 model = UNet()
 model.to(device)
@@ -67,8 +67,8 @@ num_points = point_clouds.shape[1]
 # initial descriptor
 descriptors = np.random.normal(0, 1, (1, num_points, channels_i))
 
-if os.path.isfile('%s/remote_descriptor.mat' % task):
-    content = io.loadmat('%s/remote_descriptor.mat' % task)
+if os.path.isfile('%s/descriptorpytorch.mat' % task):
+    content = io.loadmat('%s/descriptorpytorch.mat' % task)
     descriptors = content['descriptors']
     print('loaded descriptors.')
 else:
