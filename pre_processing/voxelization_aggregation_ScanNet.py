@@ -168,7 +168,7 @@ Output :
     up_boundary = tmp[1:]
     d_position = np.zeros([num_valids])  # points belong to which plane.
 
-    #splitting step
+    #splitting step-assinging points to the planes
     st = time.time()
     cnt = 0
     for i in range(num_valids):
@@ -188,6 +188,7 @@ Output :
     groups_original = u_sorted + v_sorted*w + d_position*w*h  # groups
     groups_original_sort_index = np.argsort(groups_original)  # small to large
 
+    #sorting 
     groups_original_sorted = groups_original[groups_original_sort_index]
     u_sorted_1 = u_sorted[groups_original_sort_index]
     v_sorted_1 = v_sorted[groups_original_sort_index]
@@ -203,6 +204,7 @@ Output :
     group_begin = 0
     cnt = 0
 
+    ##voxel grouping for points 
     for ii in range(num_valids):
         group_tmp = groups_original_sorted[ii]
         if (ii + 1) < num_valids:
@@ -229,6 +231,7 @@ Output :
     split_each_begin_in_group = np.concatenate((np.array([0]), split_position[0]))
     d_valid = d_position_sorted_1[groups_index[split_each_begin_in_group]]
 
+    #calculating the max points and assigning split position 
     for j in range(len(split_each_begin)):
 
         begin = split_each_begin[j]
