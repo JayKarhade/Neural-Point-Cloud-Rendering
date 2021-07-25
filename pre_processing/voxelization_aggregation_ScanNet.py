@@ -8,7 +8,10 @@ import os, cv2, time, math, scipy
 import scipy.io as io
 
 def loadfile(ply_path):
-
+'''
+Input : ply path 
+Output : point cloud positions and colors in two different numpy arrays
+'''
     st = time.time()
     position = []
     color = []
@@ -32,7 +35,10 @@ def loadfile(ply_path):
 
 
 def preparedata(dir):
-
+'''
+Input : color directory of the scannet dataset
+Output : List of file names of each image frame
+'''
     color_names = []
     assert os.path.isdir(dir), '%s is not a valid dir' % dir
 
@@ -45,7 +51,11 @@ def preparedata(dir):
 
 
 def CameraParameterRead(dir):
+'''
+Input : Directory to camera params for scannet
+Output : reads the intrisnic and extrinsic params linewise,from text file, converts to numpy array and stores them in 4 different lists.
 
+'''
     intrinsic_color_path = dir + 'intrinsic_color.txt'
     intrinsic_depth_path = dir + 'intrinsic_depth.txt'
     extrinsic_color_path = dir + 'extrinsic_color.txt'
@@ -92,7 +102,11 @@ def CameraParameterRead(dir):
 
 
 def CameraPoseRead(dir, index):
+'''
+Reads camera pose from a text file and returns the camera pose.
 
+Can be self generated as well
+'''
     camera_pose_path = dir + '%s.txt' % index
     camera_pose = []
 
@@ -107,28 +121,32 @@ def CameraPoseRead(dir, index):
 
 
 def Voxelization(w, h, intrinsic_matrix, extrinsic_matrix, point_clouds, valid_depth_near, valid_depth_far, num_planes):
-
+'''
+Input : 
+Output : 
+'''
     st = time.time()
     transform_matrix = intrinsic_matrix.dot(np.linalg.inv(extrinsic_matrix))
-    position_image = transform_matrix.dot(point_clouds)
+    position_image = transform_matrix.dot(point_clouds)##getting reprojected point cloud w.r.t camera frames
 
     print('reproject_time: %s' %(time.time() - st))
 
-    depth_all = position_image[2, :]
-    u_all =position_image[0, :] / (depth_all+1e-10)
-    v_all =position_image[1, :] / (depth_all+1e-10)
+    depth_all = position_image[2, :]#depth column of point cloud
+    u_all =position_image[0, :] / (depth_all+1e-10)#depth image normalization
+    v_all =position_image[1, :] / (depth_all+1e-10)#depth image normalization
 
-    valid_u = np.where((u_all >= 0) & (u_all <= (w-1)))
-    valid_v = np.where((v_all >= 0) & (v_all <= (h-1)))
-    valid_d = np.where((depth_all > valid_depth_near) & (depth_all < valid_depth_far))
+    valid_u = np.where((u_all >= 0) & (u_all <= (w-1))) #extracting those within the camera frustrum width
+    valid_v = np.where((v_all >= 0) & (v_all <= (h-1))) #extracting those within the camera frustrum height
+    valid_d = np.where((depth_all > valid_depth_near) & (depth_all < valid_depth_far)) #extracting those within the camera frustrum depth
 
-    valid_position = np.intersect1d(valid_u, valid_v)
-    valid_position = np.intersect1d(valid_position, valid_d)
+    valid_position = np.intersect1d(valid_u, valid_v)##satisfying both conditions
+    valid_position = np.intersect1d(valid_position, valid_d)#satisfying both conditions
 
-    selected_depth = depth_all[valid_position]
+    selected_depth = depth_all[valid_position] #get depth according to valid positions
     index = np.argsort(-selected_depth)  # depth large to small
     index = index[100:-50]  # in order to reduce outliers' influence during voxelization, we remove 100 furthest and 50 nearest points.
 
+    #sorting of arrays 
     valid_position_sorted = valid_position[index]
     valid_d_sorted = depth_all[valid_position_sorted]
     center_u_sorted = u_all[valid_position_sorted]
@@ -146,10 +164,11 @@ def Voxelization(w, h, intrinsic_matrix, extrinsic_matrix, point_clouds, valid_d
 
     valid_d_min = valid_d_sorted[num_valids - 1]  # near depth plane
     valid_d_max = valid_d_sorted[0]  # far depth plane
-    tmp = np.linspace(valid_d_max, valid_d_min, num_planes+1)
+    tmp = np.linspace(valid_d_max, valid_d_min, num_planes+1)#planes acc to linspacing
     up_boundary = tmp[1:]
     d_position = np.zeros([num_valids])  # points belong to which plane.
 
+    #splitting step
     st = time.time()
     cnt = 0
     for i in range(num_valids):
