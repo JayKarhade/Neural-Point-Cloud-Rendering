@@ -29,6 +29,7 @@ def calc_same_padding(in_ch,stride,dilation,kernel):
 class UNet(nn.Module):
   def __init__(self):
     super().__init__()
+    self.conv_map = nn.Conv3d(6,11,kernel_size=1)
     self.conv0  = nn.Conv3d(11,16,kernel_size = 1)
     self.conv1  = nn.Conv3d(16,32,kernel_size = 3,padding=1)
     self.pool1 = nn.MaxPool3d(kernel_size=(2,2,2),stride=(2))
@@ -50,7 +51,8 @@ class UNet(nn.Module):
     self.conv12_1 = nn.Conv3d(32,1,kernel_size=1)
 
   def forward(self,x):
-    conv0 = F.leaky_relu(self.conv0(x),0.1)
+    conv_map = self.conv_map(x)
+    conv0 = F.leaky_relu(self.conv0(conv_map),0.1)
     #print("conv0",conv0.shape)
     conv1 = F.leaky_relu(self.conv1(conv0),0.1)
     #print("conv1",conv1.shape)
