@@ -19,7 +19,7 @@ torch.cuda.empty_cache()
 
 is_training = True  # if test, set this 'False'
 use_viewdirection = True  # use view direction
-renew_input = True   # optimize input point features.
+renew_input = False   # optimize input point features.
 constant_initial = True  # use constant value for initialization.
 use_RGB = True     # use RGB information for initialization.
 random_crop = True  # crop image.
@@ -34,7 +34,7 @@ w_croped = 320  # crop size width
 forward_time = 4  # optimize input point features after cropping 4 times on one image.
 overlap = 32  # size of overlap region of crops.
 
-channels_i = int(8)  # dimension of input point features
+channels_i = int(3)#int(8)  # dimension of input point features
 channels_o = 3  # output image dimensions
 channels_v = 3  # view direction dimensions
 
@@ -127,10 +127,6 @@ if is_training==True:
             st = time.time()
             image_descriptor = np.zeros([1, d, h, w, channels_i], dtype=np.float32)
             view_direction = np.zeros([1, d, h, w, channels_v], dtype=np.float32)
-            input_gradient_all = np.zeros([1, d, h, w, channels_i], dtype=np.float32)
-            input_gradient_all = torch.from_numpy(input_gradient_all).permute(0,4,1,2,3).to(device)
-            count = np.zeros([1,1, d, h, w], dtype=np.float32)
-            #count = torch.from_numpy(count).permute(0,4,1,2,3).to(device)
             camera_name = camera_names_train[i]
             index_name = index_names_train[i]
             image_name = image_names_train[i]
@@ -156,9 +152,6 @@ if is_training==True:
             weight = npzfile_weight['weight_average']  # normalized weights for points aggregation.
             distance_to_depth_min = npzfile_weight['distance_to_depth_min']  # distance to minimum depth value in one group/voxel.
 
-            # calculate update weight of each point feature
-            descriptor_renew_weight = (1-distance)*(1/(1+distance_to_depth_min))
-
             extrinsic_matrix = CameraPoseRead(camera_name)  # camera to world
             camera_position = np.transpose(extrinsic_matrix[0:3, 3])
 
@@ -176,8 +169,7 @@ if is_training==True:
             image_descriptor.requires_grad=True
             view_direction = torch.from_numpy(view_direction).permute(0,4,1,2,3).to(device)
             view_direction.requires_grad=True
-            #img_desc_gradient = image_descriptor.clone().detach() ##Copy for input grad
-            #img_desc_gradient.requires_grad=True
+
             if random_crop:
 
                 # limitation of memory etc, we crop the image.
@@ -198,38 +190,17 @@ if is_training==True:
                     if j==3:
                         top_left_u = w_croped - movement_u
                         top_left_v = h_croped - movement_v
-                    ##Resize image      
-                    #image_descriptor = image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
-                    #view_direction = view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
-                    #image_output = image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]
-                     
-                    #image_descriptor = (image_descriptor).permute(0,4,1,2,3)#.cuda()
-                    #view_direction = (view_direction).permute(0,4,1,2,3)#.cuda()
-                    #print("image descriptor",image_descriptor.shape)
-                    #print("view direction", view_direction.shape)
+
                     opt.zero_grad()
                     data = torch.cat((image_descriptor[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)],view_direction[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]),1)
                     output = model(data)
                     current_loss = VGG_loss.calc_loss(output[2],torch.from_numpy(image_output[:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped), :]))[6]
                     print('loss')
-                    input_gradient = (torch.autograd.grad(current_loss,image_descriptor,allow_unused=True,retain_graph=True))
                     current_loss.backward(retain_graph=False)
                     print('backprop')
                     opt.step()
                     print('step')                    
-                    #input_gradient = (torch.autograd.grad(current_loss,image_descriptor,allow_unused=True))
-                    print("input gradient all",input_gradient_all.shape)
-                    print("input gradient",input_gradient[0].shape)
                     
-                    input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = input_gradient[0][:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + input_gradient_all[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)]
-                    count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] = count[:, :,:, top_left_v:(top_left_v + h_croped), top_left_u:(top_left_u + w_croped)] + 1
-
-                if renew_input:
-                    input_gradient_all=input_gradient_all.cpu().detach().numpy()
-                    input_gradient_all = input_gradient_all/(count+1e-10)
-                    print(type(descriptors))
-                    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient_all[0,:,n, v, u]
-
             elif not random_crop:
                 opt.zero_grad()
                 data = torch.cat((image_descriptor,view_direction),1)
@@ -237,11 +208,7 @@ if is_training==True:
                 current_loss = VGG_loss(output,image_output)
                 current_loss.backward()
                 opt.step()
-                #input_gradient = torch.autograd.grad(current_loss,image_descriptor)
 
-                #if renew_input:
-                #    descriptors[0, select_index, :] = descriptors[0, select_index, :] - learning_rate_1 * np.expand_dims(descriptor_renew_weight, axis=1) * input_gradient[0][0, n, v, u, :]
-            
             all[i] = current_loss*255.0
             cnt = cnt+1
             print('%s %s %s %.2f %.2f %s' % (epoch, i, cnt, current_loss, np.mean(all[np.where(all)]), time.time() - st))
