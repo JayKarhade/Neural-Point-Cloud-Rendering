@@ -1,0 +1,21 @@
+Description : Code Snippets for temporary purposes
+
+1. Insert at Line : 151, network_pytorch.py
+
+        t = data[0]
+        img = t[:3,:,:,:]
+        img = img.permute(1,2,3,0)
+        img = img.detach().to('cpu').numpy()
+        img = img*255
+        #np.save('check'+str(id)+'.npy',img)
+        #print(img.shape)
+        f = img
+
+        cur_frame = f[0]
+        condition = [0,0,0]
+
+        for i in range(f.shape[0]):
+          indices = np.where(np.all(cur_frame == condition, axis=-1))
+          print(indices[0].shape)
+          cur_frame[indices[0],indices[1]] = cur_frame[indices[0],indices[1]]+ f[i][indices[0],indices[1]]
+        cv2_imshow(cur_frame)
