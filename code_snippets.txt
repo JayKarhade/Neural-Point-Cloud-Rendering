@@ -1,6 +1,6 @@
 Description : Code Snippets for temporary purposes
 
-1. Insert at Line : 151, network_pytorch.py
+1.For checking input images Insert at Line : 151, npcr_Scannet_pytorch.py
 
         t = data[0]
         img = t[:3,:,:,:]
