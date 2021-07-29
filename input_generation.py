@@ -4,15 +4,19 @@ import random
 from scipy.spatial.transform import Rotation as R
 from pre_processing.voxelization_aggregation_ScanNet import *
 
-num_aug_poses = int(input("Enter Number of augmented poses you want : "))
+##This file currently only samples poses. Direct input generation will be added very soon.
 
-pose_index = np.random.randint(low=1,high=100)
 
+num_aug_poses = int(input("Enter Number of augmented poses you want from each image: "))
+posedir = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/data/ScanNet/scene0010_00/pose/'
+
+pose_index = np.random.randint(low=1,high=100,size=5)
+print(pose_index)
 cam_mat_list = []
 
-for i in range(pose_index.shape):
+for i in range(len(pose_index)):
     idx = pose_index[i]
-    x = np.genfromtxt(str(idx)+'.txt')
+    x = np.genfromtxt(posedir+str(idx)+'.txt')
     for j in range(num_aug_poses):
         ##x is the pose 
         cam_matrix_new = x.copy()##array to store new poses
@@ -28,12 +32,13 @@ for i in range(pose_index.shape):
         cam_mat_list.append(x)
 
 cam_mat_final = np.asarray(cam_mat_list)
+#print(cam_mat_final)
+np.save("/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses/aug_poses.npy",cam_mat_final)
 
-np.save("aug_poses",cam_mat_final)
-
-if not os.path.isdir('generated_poses'):
-    os.makedirs('generated_poses')
+if not os.path.isdir('/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses'):
+    os.makedirs('/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses')
 
 for i in range(len(cam_mat_list)):
-    filename = 'generated_poses/'+str(i)+'.txt'
+    filename = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/'+'generated_poses/'+str(i)+'.txt'
     np.savetxt(filename,cam_mat_list[i])
+
