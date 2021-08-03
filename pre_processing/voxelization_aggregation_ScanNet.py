@@ -1,6 +1,8 @@
 """
 This file is used to pre-process voxlization and aggregation weights, in order to save training time.
+
 Re-project simplified point clouds to multi-plane, 32 planes are used.
+
 """
 from __future__ import division
 import numpy as np
@@ -8,10 +10,7 @@ import os, cv2, time, math, scipy
 import scipy.io as io
 
 def loadfile(ply_path):
-'''
-Input : ply path 
-Output : point cloud positions and colors in two different numpy arrays
-'''
+
     st = time.time()
     position = []
     color = []
@@ -35,10 +34,7 @@ Output : point cloud positions and colors in two different numpy arrays
 
 
 def preparedata(dir):
-'''
-Input : color directory of the scannet dataset
-Output : List of file names of each image frame
-'''
+
     color_names = []
     assert os.path.isdir(dir), '%s is not a valid dir' % dir
 
@@ -51,11 +47,7 @@ Output : List of file names of each image frame
 
 
 def CameraParameterRead(dir):
-'''
-Input : Directory to camera params for scannet
-Output : reads the intrisnic and extrinsic params linewise,from text file, converts to numpy array and stores them in 4 different lists.
 
-'''
     intrinsic_color_path = dir + 'intrinsic_color.txt'
     intrinsic_depth_path = dir + 'intrinsic_depth.txt'
     extrinsic_color_path = dir + 'extrinsic_color.txt'
@@ -102,11 +94,7 @@ Output : reads the intrisnic and extrinsic params linewise,from text file, conve
 
 
 def CameraPoseRead(dir, index):
-'''
-Reads camera pose from a text file and returns the camera pose.
 
-Can be self generated as well
-'''
     camera_pose_path = dir + '%s.txt' % index
     camera_pose = []
 
@@ -121,32 +109,28 @@ Can be self generated as well
 
 
 def Voxelization(w, h, intrinsic_matrix, extrinsic_matrix, point_clouds, valid_depth_near, valid_depth_far, num_planes):
-'''
-Input : 
-Output : 
-'''
+
     st = time.time()
     transform_matrix = intrinsic_matrix.dot(np.linalg.inv(extrinsic_matrix))
-    position_image = transform_matrix.dot(point_clouds)##getting reprojected point cloud w.r.t camera frames
+    position_image = transform_matrix.dot(point_clouds)
 
     print('reproject_time: %s' %(time.time() - st))
 
-    depth_all = position_image[2, :]#depth column of point cloud
-    u_all =position_image[0, :] / (depth_all+1e-10)#depth image normalization
-    v_all =position_image[1, :] / (depth_all+1e-10)#depth image normalization
+    depth_all = position_image[2, :]
+    u_all =position_image[0, :] / (depth_all+1e-10)
+    v_all =position_image[1, :] / (depth_all+1e-10)
 
-    valid_u = np.where((u_all >= 0) & (u_all <= (w-1))) #extracting those within the camera frustrum width
-    valid_v = np.where((v_all >= 0) & (v_all <= (h-1))) #extracting those within the camera frustrum height
-    valid_d = np.where((depth_all > valid_depth_near) & (depth_all < valid_depth_far)) #extracting those within the camera frustrum depth
+    valid_u = np.where((u_all >= 0) & (u_all <= (w-1)))
+    valid_v = np.where((v_all >= 0) & (v_all <= (h-1)))
+    valid_d = np.where((depth_all > valid_depth_near) & (depth_all < valid_depth_far))
 
-    valid_position = np.intersect1d(valid_u, valid_v)##satisfying both conditions
-    valid_position = np.intersect1d(valid_position, valid_d)#satisfying both conditions
+    valid_position = np.intersect1d(valid_u, valid_v)
+    valid_position = np.intersect1d(valid_position, valid_d)
 
-    selected_depth = depth_all[valid_position] #get depth according to valid positions
+    selected_depth = depth_all[valid_position]
     index = np.argsort(-selected_depth)  # depth large to small
     index = index[100:-50]  # in order to reduce outliers' influence during voxelization, we remove 100 furthest and 50 nearest points.
 
-    #sorting of arrays 
     valid_position_sorted = valid_position[index]
     valid_d_sorted = depth_all[valid_position_sorted]
     center_u_sorted = u_all[valid_position_sorted]
@@ -164,11 +148,10 @@ Output :
 
     valid_d_min = valid_d_sorted[num_valids - 1]  # near depth plane
     valid_d_max = valid_d_sorted[0]  # far depth plane
-    tmp = np.linspace(valid_d_max, valid_d_min, num_planes+1)#planes acc to linspacing
+    tmp = np.linspace(valid_d_max, valid_d_min, num_planes+1)
     up_boundary = tmp[1:]
     d_position = np.zeros([num_valids])  # points belong to which plane.
 
-    #splitting step-assinging points to the planes
     st = time.time()
     cnt = 0
     for i in range(num_valids):
@@ -188,7 +171,6 @@ Output :
     groups_original = u_sorted + v_sorted*w + d_position*w*h  # groups
     groups_original_sort_index = np.argsort(groups_original)  # small to large
 
-    #sorting 
     groups_original_sorted = groups_original[groups_original_sort_index]
     u_sorted_1 = u_sorted[groups_original_sort_index]
     v_sorted_1 = v_sorted[groups_original_sort_index]
@@ -204,7 +186,6 @@ Output :
     group_begin = 0
     cnt = 0
 
-    ##voxel grouping for points 
     for ii in range(num_valids):
         group_tmp = groups_original_sorted[ii]
         if (ii + 1) < num_valids:
@@ -231,7 +212,6 @@ Output :
     split_each_begin_in_group = np.concatenate((np.array([0]), split_position[0]))
     d_valid = d_position_sorted_1[groups_index[split_each_begin_in_group]]
 
-    #calculating the max points and assigning split position 
     for j in range(len(split_each_begin)):
 
         begin = split_each_begin[j]
@@ -321,14 +301,16 @@ if __name__ == '__main__':
     a = 1  # hyperparameter
     b = 1  # hyperparameter
 
-    scene = 'scene0010_00'
-    dir1 = '../data/ScanNet/%s/depth/' % scene
-    dir2 = '../data/ScanNet/%s/intrinsic/' % scene
-    dir3 = '../data/ScanNet/%s/pose/' % scene
-    dir4 = '../data/ScanNet/%s/color/' % scene
-    point_clouds_path = '../pre_processing_results/ScanNet/%s/point_clouds_simplified.ply' % scene
-    output_dir = '../pre_processing_results/ScanNet/%s/reproject_results_%s/' % (scene, num)
-    output_dir1 = '../pre_processing_results/ScanNet/%s/weight_%s/' % (scene, num)
+    scene = 'scene0010_00'##original scene to get the camera info
+    scene_op = 'scene0010_00_augment'##where you want to store the preprocessed outputs
+    root = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering'##root folder of repo
+    #dir1 = root+'/data/ScanNet/%s/depth/' % scene
+    dir2 = root+'/data/ScanNet/%s/intrinsic/' % scene##camera intrinsics
+    dir3 = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses/'#where generated poses are stored
+    #dir4 = root+'/data/ScanNet/%s/color/' % scene
+    point_clouds_path = root+'/pre_processing_results/ScanNet/%s/point_clouds_simplified.ply' % scene##point cloud loc
+    output_dir = root+'/pre_processing_results/ScanNet/%s/reproject_results_%s/' % (scene_op, num)#outputs
+    output_dir1 = root+'/pre_processing_results/ScanNet/%s/weight_%s/' % (scene_op, num)#outputs
 
     # meter, valid depth range
     near = 0.2
@@ -340,7 +322,11 @@ if __name__ == '__main__':
 
 ######################################################################################################################
 
-    color_names = sorted(preparedata(dir4))
+    #color_names = sorted(preparedata(dir4))#dont use this 
+    #a better way of preparing datasize
+    path, dirs, files = next(os.walk(dir3))
+    file_count = len(files)-1 ##-1 to remove .npy file
+
     point_clouds, point_clouds_colors = loadfile(point_clouds_path)
 
     intrinsic_color, intrinsic_depth, _, _ = CameraParameterRead(dir2)
@@ -362,16 +348,17 @@ if __name__ == '__main__':
         os.makedirs(output_dir)
 
     tmp = 0
-    for i in range(len(color_names)):
+    for i in range(file_count):
         if os.path.isfile(output_dir + '%s_compressed.npz' % i):
             continue
 
         st = time.time()
-        depth_name = dir1 + '%s.png' % i
-        depth_image = cv2.imread(depth_name, -1) / 1000
+        #depth_name = dir1 + '%s.png' % i
+        #depth_image = cv2.imread(depth_name, -1) / 1000
         extrinsic_matrix = CameraPoseRead(dir3, i)
 
-        if extrinsic_matrix[0, 0] < -1e6:  # avoid invalid pose -inf
+        if extrinsic_matrix[0, 0] < -1e6:
+            print('invalid pose, jumping to next one')  # avoid invalid pose -inf
             continue
 
         u, v, d, index, \
@@ -390,17 +377,18 @@ if __name__ == '__main__':
     if not os.path.isdir(output_dir1):
         os.makedirs(output_dir1)
 
-    for i in range(len(color_names)):
+    for i in range(file_count):
 
         if os.path.isfile(output_dir1 + '%s_weight.npz' % i):
             continue
 
         st = time.time()
-        depth_name = dir1 + '%s.png' % i
-        depth_image = cv2.imread(depth_name, -1) / 1000
+        #depth_name = dir1 + '%s.png' % i
+        #depth_image = cv2.imread(depth_name, -1) / 1000
         extrinsic_matrix = CameraPoseRead(dir3, i)
 
         if extrinsic_matrix[0, 0] < -1e6:  # avoid invalid pose -inf
+            print('invalid pose, jumping to next one')
             continue
 
         if not os.path.isfile(output_dir + '%s_compressed.npz' % i):
@@ -413,4 +401,3 @@ if __name__ == '__main__':
 
         np.savez_compressed(output_dir1 + '%s_weight' % i, weight_average=weight_average, distance_to_depth_min=distance_to_depth_min)
         print('Aggregation_time: %ss' %(time.time() - st))
-
