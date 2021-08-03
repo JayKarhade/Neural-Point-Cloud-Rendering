@@ -5,9 +5,12 @@ from scipy.spatial.transform import Rotation as R
 from pre_processing.voxelization_aggregation_ScanNet import *
 
 num_aug_poses = int(input("Enter Number of augmented poses you want from each image: "))
+low_idx = int(input('Enter smallest file index for sampling: '))
+high_idx = int(input('Enter highest file index for sampling'))
+num_file_samples = int(input("Enter number of files you want to sample from"))
 posedir = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/data/ScanNet/scene0010_00/pose/'
 
-pose_index = (np.linspace(0,10,num=11))#np.random.randint(low=1,high=100,size=5)
+pose_index = np.random.randint(low=low_idx,high=high_idx,size=num_file_samples)
 print(pose_index)
 cam_mat_list = []
 
@@ -34,7 +37,7 @@ for i in range(len(pose_index)):
 
 cam_mat_final = np.asarray(cam_mat_list)
 #print(cam_mat_final)
-np.save("/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses/aug_poses.npy",cam_mat_final)
+#np.save("/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses/aug_poses.npy",cam_mat_final)
 
 if not os.path.isdir('/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses'):
     os.makedirs('/content/drive/MyDrive/Neural-Point-Cloud-Rendering/generated_poses')
@@ -43,5 +46,5 @@ for i in range(len(cam_mat_list)):
     #print('original',np.genfromtxt(posedir+str(i)+'.txt'))
     #print('new',cam_mat_list[i])
     filename = '/content/drive/MyDrive/Neural-Point-Cloud-Rendering/'+'generated_poses/'+str(i)+'.txt'
-    np.savetxt(filename,cam_mat_list[i])
+    #np.savetxt(filename,cam_mat_list[i])
 
