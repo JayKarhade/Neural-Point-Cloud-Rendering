@@ -13,12 +13,4 @@ Pytorch == 1.8.1
 
 The tensorflow codebase can be located at this repository : https://github.com/daipengwa/Neural-Point-Cloud-Rendering-via-Multi-Plane-Projection
 
-Current ongoing:
-
-Codebase for ScanNet dataset being shfited.
-
-Future:
-
-Support for GraspNet dataset.
-
 
